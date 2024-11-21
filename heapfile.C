@@ -149,7 +149,7 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
         curPageNo = rid.pageNo;
         curDirtyFlag = true;
         curRec = rid;
-        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
+//        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
     }
 
     // if desired record is on the current page ok, else unpin the current pinned page and use the pageNo field of the RID to read the page into the bufer pool
@@ -159,12 +159,12 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
         curPageNo = rid.pageNo;
         curDirtyFlag = false;
         curRec = rid;
-        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
+//        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
     }
 
     // got correct page, now get the record
     status = curPage->getRecord(rid, rec);
-    cout << "getRecord: got record " << rid.slotNo << " from page " << rid.pageNo << endl;
+//    cout << "getRecord: got record " << rid.slotNo << " from page " << rid.pageNo << endl;
     return status;
 }
 
