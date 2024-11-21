@@ -80,31 +80,34 @@ const Status destroyHeapFile(const string fileName)
  */
 HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 {
-    Status 	status;
-    Page*	pagePtr;
-
+    Status status;
+    Page* pagePtr;
     cout << "opening file " << fileName << endl;
 
     // open the file and read in the header page and the first data page
+
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+        db.openFile(fileName, filePtr);
+        // read in the header page
+        status = bufMgr->readPage(filePtr, 0, pagePtr);
+        filePtr->getFirstPage(headerPageNo);
+        headerPage = (FileHdrPage *) pagePtr;
+        hdrDirtyFlag = false;
+        // read in the first data page into the buffer pool
+        status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
+        curPageNo = headerPage->firstPage;
+        curDirtyFlag = false;
+        curRec = NULLRID;
+        returnStatus = OK;
+        cout << "opened file " << fileName << " with " << headerPage->recCnt << " records" << endl;
+        return;
     }
     else
     {
-    	cerr << "open of heap file failed\n";
-		returnStatus = status;
-		return;
+        cerr << "open of heap file failed\n";
+        returnStatus = status;
+        return;
     }
 }
 
@@ -417,10 +420,10 @@ InsertFileScan::~InsertFileScan()
  */
 const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
 {
-    Page*	newPage;
-    int		newPageNo;
-    Status	status, unpinstatus;
-    RID		rid;
+    Page* newPage;
+    int newPageNo;
+    Status status, unpinstatus;
+    RID rid;
 
     // check for very large records
     if ((unsigned int) rec.length > PAGESIZE-DPFIXED)
@@ -428,19 +431,51 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
         // will never fit on a page, so don't even bother looking
         return INVALIDRECLEN;
     }
+    // see if the current page has room
+    if (curPage == NULL) {
+        // make the last page of the current page and read it into buffer
+        status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
+        cout << "insertRecord: read last page " << headerPage->lastPage << " into buffer pool" << endl;
+    }
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+    if (curPage->insertRecord(rec, rid) == OK)
+    {
+        outRid = rid;
+        curDirtyFlag = true;
+        headerPage->recCnt++;
+        hdrDirtyFlag = true;
+        cout << "Inserted record in currPage" << endl;
+        return OK;
+    } else {
+        // insert unsuccessful, create new page and link appropriately
+        bufMgr->unPinPage(filePtr, curPageNo, true);
+        bufMgr->disposePage(filePtr, curPageNo);
+        cout << "insertRecord: unpinned and disposed of page " << curPageNo << endl;
+        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+        if (status != OK) {
+            cout << "error in allocPage call in insertRecord\n";
+            return status;
+        }
+        newPage->init(newPageNo);
+        cout << "insertRecord: allocated new page " << newPageNo << " into buffer pool" << endl;
+        headerPage->lastPage = newPageNo;
+        headerPage->pageCnt++;
+        hdrDirtyFlag = true;
+        // link the new page to the current page
+        curPage->setNextPage(newPageNo);
+        curDirtyFlag = true;
+        curPage = newPage;
+        curPageNo = newPageNo;
+        // insert the record into the new page
+        if (curPage->insertRecord(rec, rid) == OK)
+        {
+            outRid = rid;
+            curDirtyFlag = true;
+            headerPage->recCnt++;
+            hdrDirtyFlag = true;
+            return OK;
+        } else {
+            return INVALIDRECLEN;
+        }
+    }
 }
-
-
