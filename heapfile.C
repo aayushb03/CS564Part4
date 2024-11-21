@@ -267,16 +267,53 @@ const Status HeapFileScan::scanNext(RID& outRid)
     int 	nextPageNo;
     Record      rec;
 
+    // If the current page is NULL, start with the first page
+    if (curPage == NULL) {
+        status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
+        if (status != OK) return status; // Handle read failure
+        curPageNo = headerPage->firstPage;
 
+        // Get the first record on the page
+        status = curPage->firstRecord(curRec);
+        if (status != OK) return status; // Handle no records on the page
+    } else {
+        // Attempt to get the next record on the current page
+        status = curPage->nextRecord(curRec, tmpRid);
+        if (status == ENDOFPAGE) {
+            // If end of the page is reached, move to the next page
+            bufMgr->unPinPage(filePtr, curPageNo, false); // Unpin the current page
 
+            // Get the next page number
+            status = curPage->getNextPage(nextPageNo);
+            if (nextPageNo == -1) return FILEEOF; // No more pages to scan
 
+            // Read the next page into the buffer
+            status = bufMgr->readPage(filePtr, nextPageNo, curPage);
+            if (status != OK) return status; // Handle read failure
+            curPageNo = nextPageNo;
 
+            // Get the first record on the new page
+            status = curPage->firstRecord(curRec);
+            if (status != OK) return status; // Handle no records on the page
+        } else if (status != OK) {
+            return status; // Handle other errors
+        } else {
+            curRec = tmpRid; // Update the current record RID
+        }
+    }
 
+    // Retrieve the record data using the current RID
+    status = curPage->getRecord(curRec, rec);
+    if (status != OK) return status;
 
+    // Check if the record matches the scan predicate
+    if (matchRec(rec)) {
+        outRid = curRec; // Store the matching record RID
+        return OK;
+    }
 
-
-
-
+    // If the record does not match, recursively call scanNext to find the next match
+    return scanNext(outRid);
 }
 
 
