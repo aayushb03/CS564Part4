@@ -1,7 +1,18 @@
 #include "heapfile.h"
 #include "error.h"
 
-// routine to create a heapfile
+/**
+ * This function creates an empty (well, almost empty) heap file. To do this create a db level file by calling
+ * db->createfile(). Then, allocate an empty page by invoking bm->allocPage() appropriately. As you know allocPage()
+ * will return a pointer to an empty page in the buffer pool along with the page number of the page. Take the Page*
+ * pointer returned from allocPage() and cast it to a FileHdrPage*. Using this pointer initialize the values in the
+ * header page.  Then make a second call to bm->allocPage(). This page will be the first data page of the file. Using
+ * the Page* pointer returned, invoke its init() method to initialize the page contents.  Finally, store the page number
+ * of the data page in firstPage and lastPage attributes of the FileHdrPage. When you have done all this unpin both
+ * pages and mark them as dirty.
+ * @param fileName
+ * @return
+ */
 const Status createHeapFile(const string fileName)
 {
     File* 		file;
@@ -48,13 +59,25 @@ const Status createHeapFile(const string fileName)
     return (FILEEXISTS);
 }
 
-// routine to destroy a heapfile
+/**
+ * This is easy. Simply call db->destroyFile(). The user is expected to have closed all instances of the file before
+ * calling this function.
+ * @param fileName
+ * @return
+ */
 const Status destroyHeapFile(const string fileName)
 {
 	return (db.destroyFile (fileName));
 }
 
-// constructor opens the underlying file
+/*
+ * This method first opens the appropriate file by calling db.openFile() (do not forget to save the File* returned in
+ * the filePtr data member). Next, it reads and pins the header page for the file in the buffer pool, initializing the
+ * private data members headerPage, headerPageNo, and hdrDirtyFlag. You might be wondering how you get the page number
+ * of the header page. This is what file->getFirstPage() is used for (see description of the I/O layer)! Finally, read
+ * and pin the first page of the file into the buffer pool, initializing the values of curPage, curPageNo, and
+ * curDirtyFlag appropriately. Set curRec to NULLRID.
+ */
 HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 {
     Status 	status;
@@ -85,7 +108,9 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     }
 }
 
-// the destructor closes the file
+/*
+ * The destructor first unpins the header page and currently pinned data page and then calls db.closeFile.
+ */
 HeapFile::~HeapFile()
 {
     Status status;
@@ -117,18 +142,25 @@ HeapFile::~HeapFile()
     }
 }
 
-// Return number of records in heap file
-
+/**
+ * Returns the number of records currently in the file (as found in the header page for the file).
+ * @return
+ */
 const int HeapFile::getRecCnt() const
 {
   return headerPage->recCnt;
 }
 
-// retrieve an arbitrary record from a file.
-// if record is not on the currently pinned page, the current page
-// is unpinned and the required page is read into the buffer pool
-// and pinned.  returns a pointer to the record via the rec parameter
-
+/**
+ * This method returns a record (via the rec structure) given the RID of the record. The private data members curPage
+ * and curPageNo should be used to keep track of the current data page pinned in the buffer pool. If the desired record
+ * is on the currently pinned page, simply invoke curPage->getRecord(rid, rec) to get the record.  Otherwise, you need
+ * to unpin the currently pinned page (assuming a page is pinned) and use the pageNo field of the RID to read the page
+ * into the buffer pool.
+ * @param rid
+ * @param rec
+ * @return
+ */
 const Status HeapFile::getRecord(const RID & rid, Record & rec)
 {
     Status status;
@@ -142,6 +174,7 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
    
    
 }
+
 
 HeapFileScan::HeapFileScan(const string & name,
 			   Status & status) : HeapFile(name, status)
@@ -229,7 +262,18 @@ const Status HeapFileScan::resetScan()
     return OK;
 }
 
-
+/**
+ * Returns (via the outRid parameter) the RID of the next record that satisfies the scan predicate. The basic idea is
+ * to scan the file one page at a time. For each page, use the firstRecord() and nextRecord() methods of the Page class
+ * to get the rids of all the records on the page. Convert the rid to a pointer to the record data and invoke matchRec()
+ * to determine if record satisfies the filter associated with the scan. If so, store the rid in curRec and return
+ * curRec. To make things fast, keep the current page pinned until all the records on the page have been processed.
+ * Then continue with the next page in the file.  Since the HeapFileScan class is derived from the HeapFile class it
+ * also has all the methods of the HeapFile class as well. Returns OK if no errors occurred. Otherwise, return the
+ * error code of the first error that occurred.
+ * @param outRid
+ * @return
+ */
 const Status HeapFileScan::scanNext(RID& outRid)
 {
     Status 	status = OK;
@@ -356,7 +400,21 @@ InsertFileScan::~InsertFileScan()
     }
 }
 
-// Insert a record into the file
+/**
+ * Inserts the record described by rec into the file returning the RID of the inserted record in outRid.
+ *
+ * TIPS: check if curPage is NULL. If so, make the last page the current page and read it into the buffer. Call
+ * curPage->insertRecord to insert the record. If successful, remember to DO THE BOOKKEEPING. That is, you have to
+ * update data fields such as recCnt, hdrDirtyFlag, curDirtyFlag, etc.
+ *
+ * If can't insert into the current page, then create a new page, initialize it properly, modify the header page
+ * content properly, link up the new page appropriately, make the current page to be the newly allocated page, then
+ * try to insert the record. Don't forget bookkeeping that must be done after successfully inserting the record.
+ *
+ * @param rec
+ * @param outRid
+ * @return
+ */
 const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
 {
     Page*	newPage;
