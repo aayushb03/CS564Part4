@@ -69,7 +69,7 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     {
         db.openFile(fileName, filePtr);
         // read in the header page
-        status = bufMgr->readPage(filePtr, 0, pagePtr);
+        status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
 
         filePtr->getFirstPage(headerPageNo);
         headerPage = (FileHdrPage *) pagePtr;
