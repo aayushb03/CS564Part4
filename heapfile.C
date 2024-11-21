@@ -420,14 +420,14 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
         // insert unsuccessful, create new page and link appropriately
         bufMgr->unPinPage(filePtr, curPageNo, true);
         bufMgr->disposePage(filePtr, curPageNo);
-        cout << "insertRecord: unpinned and disposed of page " << curPageNo << endl;
+//        cout << "insertRecord: unpinned and disposed of page " << curPageNo << endl;
         status = bufMgr->allocPage(filePtr, newPageNo, newPage);
         if (status != OK) {
             cout << "error in allocPage call in insertRecord\n";
             return status;
         }
         newPage->init(newPageNo);
-        cout << "insertRecord: allocated new page " << newPageNo << " into buffer pool" << endl;
+//        cout << "insertRecord: allocated new page " << newPageNo << " into buffer pool" << endl;
         headerPage->lastPage = newPageNo;
         headerPage->pageCnt++;
         hdrDirtyFlag = true;
