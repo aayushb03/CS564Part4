@@ -386,68 +386,49 @@ InsertFileScan::~InsertFileScan()
 }
 
 // Insert a record into the file
-const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
-{
-    Page*	newPage;
-    int		newPageNo;
-    Status	status, unpinstatus;
-    RID		rid;
-
-    // check for very large records
-    if ((unsigned int) rec.length > PAGESIZE-DPFIXED)
-    {
-        // will never fit on a page, so don't even bother looking
-        return INVALIDRECLEN;
+const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid) {
+    if ((unsigned int)rec.length > PAGESIZE - DPFIXED) {
+        return INVALIDRECLEN; // Record too large
     }
 
-    // see if the current page has room
     if (curPage == NULL) {
-        status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
-//        cout << "insertRecord: read last page " << headerPage->lastPage << " into buffer pool" << endl;
+        Status status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
+        if (status != OK) return status; // Handle read failure
+        curPageNo = headerPage->lastPage;
     }
 
-
-    if (curPage->insertRecord(rec, rid) == OK)
-    {
-        outRid = rid;
+    if (curPage->insertRecord(rec, outRid) == OK) {
         curDirtyFlag = true;
         headerPage->recCnt++;
         hdrDirtyFlag = true;
-//        cout << "Inserted record in currPage" << endl;
-
         return OK;
-    } else {
-        // insert unsuccessful, create new page and link appropriately
-        bufMgr->unPinPage(filePtr, curPageNo, true);
-        bufMgr->disposePage(filePtr, curPageNo);
-//        cout << "insertRecord: unpinned and disposed of page " << curPageNo << endl;
-        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
-        if (status != OK) {
-            cout << "error in allocPage call in insertRecord\n";
-            return status;
-        }
-        newPage->init(newPageNo);
-//        cout << "insertRecord: allocated new page " << newPageNo << " into buffer pool" << endl;
-        headerPage->lastPage = newPageNo;
-        headerPage->pageCnt++;
-        hdrDirtyFlag = true;
-
-        // link the new page to the current page
-        curPage->setNextPage(newPageNo);
-        curDirtyFlag = true;
-        curPage = newPage;
-        curPageNo = newPageNo;
-
-        // insert the record into the new page
-        if (curPage->insertRecord(rec, rid) == OK)
-        {
-            outRid = rid;
-            curDirtyFlag = true;
-            headerPage->recCnt++;
-            hdrDirtyFlag = true;
-            return OK;
-        } else {
-            return INVALIDRECLEN;
-        }
     }
+
+    // If we cannot insert into the current page
+    bufMgr->unPinPage(filePtr, curPageNo, true); // Mark as dirty
+
+    Page* newPage;
+    int newPageNo;
+    Status status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+    if (status != OK) return status; // Allocation failed
+
+    newPage->init(newPageNo);
+    headerPage->lastPage = newPageNo;
+    headerPage->pageCnt++;
+    hdrDirtyFlag = true;
+
+    curPage->setNextPage(newPageNo); // Link pages
+    curDirtyFlag = true;
+
+    curPage = newPage;
+    curPageNo = newPageNo;
+
+    if (curPage->insertRecord(rec, outRid) == OK) {
+        curDirtyFlag = true;
+        headerPage->recCnt++;
+        hdrDirtyFlag = true;
+        return OK;
+    }
+
+    return INVALIDRECLEN; // Unexpected failure
 }
