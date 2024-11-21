@@ -403,7 +403,7 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     // see if the current page has room
     if (curPage == NULL) {
         status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
-        cout << "insertRecord: read last page " << headerPage->lastPage << " into buffer pool" << endl;
+//        cout << "insertRecord: read last page " << headerPage->lastPage << " into buffer pool" << endl;
     }
 
 
@@ -413,7 +413,7 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
         curDirtyFlag = true;
         headerPage->recCnt++;
         hdrDirtyFlag = true;
-        cout << "Inserted record in currPage" << endl;
+//        cout << "Inserted record in currPage" << endl;
 
         return OK;
     } else {
