@@ -141,7 +141,7 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
 {
     Status status;
 
-    cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
+//    cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
 
     if (curPage == NULL) {
         // read the right page (the one with the required record) into the buffer
