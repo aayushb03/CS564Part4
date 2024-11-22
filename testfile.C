@@ -112,12 +112,12 @@ int main(int argc, char **argv)
 			// now read the record
 			//printf("getting record (%d.%d)\n",ridArray[i].pageNo, ridArray[i].slotNo);
 			status = file1->getRecord(ridArray[i], dbrec2);
-    	    if (status != OK) error.print(status);
+    	    if (status != OK) error.print(status); // invalid slot number
 
 
 			// compare with what we should get back
 			if (memcmp(&rec1, dbrec2.data, sizeof(RECORD)) != 0) 
-			    cout << "err0r reading record " << i << " back" << endl;
+			    cout << "err0r reading record " << i << " back with data : " << &dbrec2.data << " versus expected : " << &rec1 << endl;
 		}
 		cout << "getRecord() tests passed successfully" << endl;
     }
@@ -138,7 +138,10 @@ int main(int argc, char **argv)
 			sprintf(rec1.s, "This is record %05d", i);
     	    rec1.i = i;
     	    rec1.f = i;
+
     	    status = scan1->getRecord(dbrec2);
+            cout << "processing record " << i << endl;
+
     	    if (status != OK) break;
 			if (memcmp(&rec1, dbrec2.data, sizeof(RECORD)) != 0)
                 cout << "err0r reading record " << i << " back" << endl;
