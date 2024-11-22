@@ -82,6 +82,11 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
         curDirtyFlag = false;
         curRec = NULLRID;
         returnStatus = OK;
+
+        if (headerPage->recCnt < 0) {
+            headerPage->recCnt = -headerPage->recCnt;
+        }
+
         cout << "opened file " << fileName << " with " << headerPage->recCnt << " records" << endl;
         return;
     }
@@ -140,8 +145,6 @@ const int HeapFile::getRecCnt() const
 const Status HeapFile::getRecord(const RID & rid, Record & rec)
 {
     Status status;
-
-//    cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
 
     if (curPage == NULL) {
         // read the right page (the one with the required record) into the buffer
@@ -269,11 +272,15 @@ const Status HeapFileScan::scanNext(RID& outRid)
 
     // If the current page is NULL, start with the first page
     if (curPage == NULL) {
+
+        cout << "curPage is NULL" << endl;
         status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
         if (status != OK) return status; // Handle read failure
         curPageNo = headerPage->firstPage;
         status = curPage->firstRecord(curRec);
         if (status != OK) return status; // Handle no records on the page
+
+
     } else {
         // Attempt to get the next record on the current page
         status = curPage->nextRecord(curRec, tmpRid);
@@ -282,7 +289,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
             bufMgr->unPinPage(filePtr, curPageNo, false); // Unpin the current page
 
             // Get the next page number
-            status = curPage->getNextPage(nextPageNo);
+            status = curPage->getNextPage(nextPageNo); // sets next page no
             if (nextPageNo == -1) return FILEEOF; // No more pages to scan
 
             // Read the next page into the buffer

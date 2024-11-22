@@ -43,7 +43,7 @@ $(PROGRAM).pure:$(OBJS)
 		$(CXX) $(CXXFLAGS) -c $<
 
 clean:
-		rm -f core *.bak *~ *.o $(PROGRAM) *.pure .pure testpage
+		rm -f core *.bak *~ *.o $(PROGRAM) *.pure .pure testpage dummy*
 
 depend:
 		makedepend -I /s/gcc/include/g++ -f$(MAKEFILE) \
