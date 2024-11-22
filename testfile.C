@@ -137,9 +137,7 @@ int main(int argc, char **argv)
 			sprintf(rec1.s, "This is record %05d", i);
     	    rec1.i = i;
     	    rec1.f = i;
-            cout << "Aayush1" << endl;
     	    status = scan1->getRecord(dbrec2);
-            cout << "Aayush2" << endl;
     	    if (status != OK) break;
 			if (memcmp(&rec1, dbrec2.data, sizeof(RECORD)) != 0)
                 cout << "err0r reading record " << i << " back" << endl;
