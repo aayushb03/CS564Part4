@@ -39,6 +39,7 @@ const Status createHeapFile(const string fileName)
 
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
+        cout << "createHeapFile: first page = " << hdrPage->firstPage << " last page = " << hdrPage->lastPage << endl;
         hdrPage->pageCnt = 1;
 
         // unpin both and mark as dirty
