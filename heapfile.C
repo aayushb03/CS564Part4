@@ -268,7 +268,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
     Record      rec;
 
     // If the current page is NULL, start with the first page
-    if (curPage == NULL) {
+    if (curPage == nullptr) {
         status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
         if (status != OK) return status; // Handle read failure
         curPageNo = headerPage->firstPage;
