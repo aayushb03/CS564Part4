@@ -39,7 +39,6 @@ const Status createHeapFile(const string fileName)
 
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
-        cout << "createHeapFile: first page = " << hdrPage->firstPage << " last page = " << hdrPage->lastPage << endl;
         hdrPage->pageCnt = 1;
 
         // unpin both and mark as dirty
@@ -68,11 +67,11 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-        db.openFile(fileName, filePtr);
+//        db.openFile(fileName, filePtr);
         // read in the header page
+        filePtr->getFirstPage(headerPageNo);
         status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
 
-        filePtr->getFirstPage(headerPageNo);
         headerPage = (FileHdrPage *) pagePtr;
         hdrDirtyFlag = false;
 
