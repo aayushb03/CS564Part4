@@ -300,10 +300,6 @@ const Status HeapFileScan::scanNext(RID& outRid)
         }
     }
 
-    // Retrieve the record data using the current RID
-    status = curPage->getRecord(curRec, rec);
-    if (status != OK) return status;
-
     // Check if the record matches the scan predicate
     if (matchRec(rec)) {
         outRid = curRec; // Store the matching record RID
