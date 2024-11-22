@@ -268,10 +268,11 @@ const Status HeapFileScan::scanNext(RID& outRid)
     Record      rec;
 
     // If the current page is NULL, start with the first page
-    if (curPage == nullptr) {
+    if (curPage == NULL) {
         status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
         cout << "Scanning first page: " << headerPage->firstPage << endl;
         if (status != OK) return status; // Handle read failure
+        cout << "Scanned first page: " << headerPage->firstPage << endl;
         curPageNo = headerPage->firstPage;
 
         // Get the first record on the page
