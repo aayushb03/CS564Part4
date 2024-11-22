@@ -271,6 +271,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
     if (curPage == NULL) {
         status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
         cout << "Scanning first page: " << headerPage->firstPage << endl;
+        cout << "Status: " << status << endl;
         if (status != OK) return status; // Handle read failure
         cout << "Scanned first page: " << headerPage->firstPage << endl;
         curPageNo = headerPage->firstPage;
