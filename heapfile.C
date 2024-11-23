@@ -44,9 +44,11 @@ const Status createHeapFile(const string fileName)
         // unpin both and mark as dirty
         bufMgr->unPinPage(file, hdrPageNo, true);
         bufMgr->unPinPage(file, newPageNo, true);
-
+        db.closeFile(file);
         return (OK);
     }
+
+    db.closeFile(file);
     return (FILEEXISTS);
 }
 
@@ -83,9 +85,9 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
         curRec = NULLRID;
         returnStatus = OK;
 
-        if (headerPage->recCnt < 0) {
-            headerPage->recCnt = -headerPage->recCnt;
-        }
+        // if (headerPage->recCnt < 0) {
+        //     headerPage->recCnt = -headerPage->recCnt;
+        // }
 
         cout << "opened file " << fileName << " with " << headerPage->recCnt << " records" << endl;
         return;
@@ -269,7 +271,11 @@ const Status HeapFileScan::scanNext(RID& outRid)
     int 	nextPageNo;
     Record      rec;
 
-    while (true) { // Use a loop instead of recursion
+    if (getRecCnt() <= 0) return FILEEOF; // No records in the file
+
+    while (true) {
+
+
         // If the current page is NULL, start with the first page
         if (curPage == NULL) {
             status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
@@ -281,12 +287,15 @@ const Status HeapFileScan::scanNext(RID& outRid)
             // Attempt to get the next record on the current page
             status = curPage->nextRecord(curRec, tmpRid);
             if (status == ENDOFPAGE) {
-                // If end of the page is reached, move to the next page
+                // If end of the page nextRecordis reached, move to the next page
                 bufMgr->unPinPage(filePtr, curPageNo, false); // Unpin the current page
 
                 // Get the next page number
                 status = curPage->getNextPage(nextPageNo);
-                if (nextPageNo == -1) return FILEEOF; // No more pages to scan
+                // printf("nextPageNo: %d\n", nextPageNo);
+                if (nextPageNo == -1) {
+                    // db.closeFile(filePtr); // Close the file
+                    return FILEEOF;} // No more pages to scan
 
                 // Read the next page into the buffer
                 status = bufMgr->readPage(filePtr, nextPageNo, curPage);
@@ -295,10 +304,20 @@ const Status HeapFileScan::scanNext(RID& outRid)
 
                 // Get the first record on the new page
                 status = curPage->firstRecord(curRec);
-                if (status != OK) return status; // Handle no records on the page
+                while (status != OK) {
+                    curPage->getNextPage(nextPageNo);
+                    if (nextPageNo == -1) {
+                        return FILEEOF;
+                    }
+                    status = curPage->firstRecord(curRec);
+                }
+                //if (status != OK) return status; // Handle no records on the page
             } else if (status != OK) {
                 return status; // Handle other errors
             } else {
+
+                printf("curRec: %d\n", curRec.slotNo);
+                printf("curPageNo: %d\n", curPageNo);
                 curRec = tmpRid; // Update the current record RID
             }
         }
@@ -308,6 +327,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
         if (status != OK) return status; // Handle record fetch failure
 
         // Check if the record matches the scan predicate
+        // printf("number of records: %d\n", headerPage->recCnt);
         if (matchRec(rec)) {
             outRid = curRec; // Store the matching record RID
             return OK;
