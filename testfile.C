@@ -139,7 +139,6 @@ int main(int argc, char **argv)
     	    rec1.f = i;
 
     	    status = scan1->getRecord(dbrec2);
-            cout << "processing record " << i << endl;
 
     	    if (status != OK) break;
 			if (memcmp(&rec1, dbrec2.data, sizeof(RECORD)) != 0)
