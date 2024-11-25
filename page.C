@@ -239,7 +239,6 @@ const Status Page::nextRecord (const RID &curRid, RID& nextRid) const
 // returns length and pointer to record with RID rid
 const Status Page::getRecord(const RID & rid, Record & rec)
 {
-	cout << "getRecord: rid = " << rid.pageNo << "." << rid.slotNo << endl;
     int	slotNo = rid.slotNo;
     int offset;
 
