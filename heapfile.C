@@ -271,7 +271,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
     int 	nextPageNo;
     Record      rec;
 
-    if (getRecCnt() <= 0) return FILEEOF; // No records in the file
+    // if (getRecCnt() <= 0) return FILEEOF; // No records in the file
 
     while (true) {
 
@@ -288,7 +288,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
             status = curPage->nextRecord(curRec, tmpRid);
             if (status == ENDOFPAGE) {
                 // If end of the page nextRecordis reached, move to the next page
-                bufMgr->unPinPage(filePtr, curPageNo, false); // Unpin the current page
+                bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag); // Unpin the current page
 
                 // Get the next page number
                 status = curPage->getNextPage(nextPageNo);
@@ -306,6 +306,16 @@ const Status HeapFileScan::scanNext(RID& outRid)
                 status = curPage->firstRecord(curRec);
                 while (status != OK) {
                     curPage->getNextPage(nextPageNo);
+                    bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag); // Unpin the current page
+                    curDirtyFlag = false;
+                    curPage->getNextPage(nextPageNo);
+                    if (nextPageNo == -1) {
+                        return FILEEOF;
+                    }
+                    status = bufMgr->readPage(filePtr, nextPageNo, curPage);
+                    if (status != OK) return status; // Handle read failure
+                    curPageNo = nextPageNo;
+                    status = curPage->firstRecord(curRec);
                     if (nextPageNo == -1) {
                         return FILEEOF;
                     }
@@ -315,9 +325,6 @@ const Status HeapFileScan::scanNext(RID& outRid)
             } else if (status != OK) {
                 return status; // Handle other errors
             } else {
-
-                printf("curRec: %d\n", curRec.slotNo);
-                printf("curPageNo: %d\n", curPageNo);
                 curRec = tmpRid; // Update the current record RID
             }
         }
