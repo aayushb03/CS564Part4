@@ -28,6 +28,7 @@ const Status createHeapFile(const string fileName)
         hdrPage = (FileHdrPage *) newPage;
 
         strcpy(hdrPage->fileName, fileName.c_str());
+        // printf("hdrPage->fileName = %s\n", hdrPage->fileName);
 
         hdrPage->recCnt = 0;
 
@@ -43,9 +44,11 @@ const Status createHeapFile(const string fileName)
         // unpin both and mark as dirty
         bufMgr->unPinPage(file, hdrPageNo, true);
         bufMgr->unPinPage(file, newPageNo, true);
-
+        db.closeFile(file);
         return (OK);
     }
+
+    db.closeFile(file);
     return (FILEEXISTS);
 }
 
@@ -66,10 +69,11 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-        // db.openFile(fileName, filePtr);
+//        db.openFile(fileName, filePtr);
         // read in the header page
-        filePtr->getFirstPage(headerPageNo);
+        status = bufMgr->readPage(filePtr, 0, pagePtr);
 
+        filePtr->getFirstPage(headerPageNo);
         status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
 
         headerPage = (FileHdrPage *) pagePtr;
@@ -82,6 +86,11 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
         curDirtyFlag = false;
         curRec = NULLRID;
         returnStatus = OK;
+
+        // if (headerPage->recCnt < 0) {
+        //     headerPage->recCnt = -headerPage->recCnt;
+        // }
+
         cout << "opened file " << fileName << " with " << headerPage->recCnt << " records" << endl;
         return;
     }
@@ -141,16 +150,13 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
 {
     Status status;
 
-    // cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
-
     if (curPage == NULL) {
         // read the right page (the one with the required record) into the buffer
         status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
-        printf("curPage %x\n", curPage);
         curPageNo = rid.pageNo;
-        curDirtyFlag = false;
+        curDirtyFlag = true;
         curRec = rid;
-        // cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
+//        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
     }
 
     // if desired record is on the current page ok, else unpin the current pinned page and use the pageNo field of the RID to read the page into the bufer pool
@@ -160,14 +166,12 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
         curPageNo = rid.pageNo;
         curDirtyFlag = false;
         curRec = rid;
-        // cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
+//        cout << "getRecord: read correct page " << headerPage->lastPage << " into buffer pool" << endl;
     }
 
     // got correct page, now get the record
-    cout << "rid= " << curRec.pageNo << "." << curRec.slotNo << endl;
     status = curPage->getRecord(rid, rec);
-
-    // cout << "getRecord: got record " << rid.slotNo << " from page " << rid.pageNo << endl;
+//    cout << "getRecord: got record " << rid.slotNo << " from page " << rid.pageNo << endl;
     return status;
 }
 
@@ -204,6 +208,9 @@ const Status HeapFileScan::startScan(const int offset_,
     filter = filter_;
     op = op_;
 
+
+
+    cout << "scan finished" << endl;
     return OK;
 }
 
@@ -262,79 +269,81 @@ const Status HeapFileScan::resetScan()
 const Status HeapFileScan::scanNext(RID& outRid)
 {
     Status 	status = OK;
-    RID		nextRid;
     RID		tmpRid;
     int 	nextPageNo;
-    Record      rec;    
-    // if curPage null, read the next page
+    Record      rec;
+
+    // if (getRecCnt() <= 0) return FILEEOF; // No records in the file
+
+    while (true) {
 
 
-    if (curPage == NULL)
-    {
+        // If the current page is NULL, start with the first page
+        if (curPage == NULL) {
+            status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
+            if (status != OK) return status; // Handle read failure
+            curPageNo = headerPage->firstPage;
+            status = curPage->firstRecord(curRec);
+            if (status != OK) return status; // Handle no records on the page
+        } else {
+            // Attempt to get the next record on the current page
+            status = curPage->nextRecord(curRec, tmpRid);
+            if (status == ENDOFPAGE) {
+                // If end of the page nextRecordis reached, move to the next page
+                bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag); // Unpin the current page
 
+                // Get the next page number
+                status = curPage->getNextPage(nextPageNo);
+                // printf("nextPageNo: %d\n", nextPageNo);
+                if (nextPageNo == -1) {
+                    // db.closeFile(filePtr); // Close the file
+                    return FILEEOF;} // No more pages to scan
 
-        // read in the first data page
-        status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
+                // Read the next page into the buffer
+                status = bufMgr->readPage(filePtr, nextPageNo, curPage);
+                if (status != OK) return status; // Handle read failure
+                curPageNo = nextPageNo;
 
-        // page bookkeeping
-        cout << "first page: " << headerPage->firstPage << endl;
-        curPage->firstRecord(curRec);
-        curPageNo = 1;
-        curDirtyFlag = false;
-        // cout << "curRec: " << curRec.pageNo << "." << curRec.slotNo << endl;
-        // cout << "read first page" << endl;
+                // Get the first record on the new page
+                status = curPage->firstRecord(curRec);
+                while (status != OK) {
+                    curPage->getNextPage(nextPageNo);
+                    bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag); // Unpin the current page
+                    curDirtyFlag = false;
+                    curPage->getNextPage(nextPageNo);
+                    if (nextPageNo == -1) {
+                        return FILEEOF;
+                    }
+                    status = bufMgr->readPage(filePtr, nextPageNo, curPage);
+                    if (status != OK) return status; // Handle read failure
+                    curPageNo = nextPageNo;
+                    status = curPage->firstRecord(curRec);
+                    if (nextPageNo == -1) {
+                        return FILEEOF;
+                    }
+                    status = curPage->firstRecord(curRec);
+                }
+                //if (status != OK) return status; // Handle no records on the page
+            } else if (status != OK) {
+                return status; // Handle other errors
+            } else {
+                curRec = tmpRid; // Update the current record RID
+            }
+        }
+
+        // Fetch the current record data to match against the predicate
+        status = curPage->getRecord(curRec, rec);
+        if (status != OK) return status; // Handle record fetch failure
+
+        // Check if the record matches the scan predicate
+        // printf("number of records: %d\n", headerPage->recCnt);
+        if (matchRec(rec)) {
+            outRid = curRec; // Store the matching record RID
+            return OK;
+        }
+
+        // If no match, continue to the next record or page
     }
-
-
-
-
-
-
-
-
-
-
-
-    
-    // if (curPage == NULL)
-    // {
-    //     cout << "curPage is null" << endl;
-
-    //     status = bufMgr->readPage(filePtr, 1, curPage);
-    //     cout << "read first page" << endl;
-
-    //     curPage->firstRecord(curRec);
-    //     curPageNo = 1;
-    //     curDirtyFlag = false;
-    //     cout << "curRec: " << curRec.pageNo << "." << curRec.slotNo << endl;
-
-    //     Record rec;
-    //     status = curPage->getRecord(curRec, rec);
-    //     if (status != OK) return status;
-    // }
-    // // cout << "curPage: " << curPage << endl;
-    // // status = curPage->nextRecord(curRec, nextRid);
-
-    // // if (status == ENDOFPAGE) {
-    // //     cout << "END OF PAGE" << endl;
-    // //     // get the next page
-    // //     status = curPage->getNextPage(nextPageNo);
-    // //     bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-    // //     bufMgr->readPage(filePtr, nextPageNo, curPage);
-    // //     curPageNo = nextPageNo;
-    // //     curDirtyFlag = false;
-    // //     curPage->firstRecord(curRec);
-    // // }
-
-    // // // convert rid to a pointer to the record data nad invoke matchRec to determine if record satisfies 
-    // // // the scan predicate
-    // // if (matchRec(rec)) {
-    // //     outRid = curRec;
-    // //     return OK;
-    // // } else {
-    // //     return scanNext(outRid);
-    // // }
-
 }
 
 
@@ -444,68 +453,49 @@ InsertFileScan::~InsertFileScan()
 }
 
 // Insert a record into the file
-const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
-{
-    Page*	newPage;
-    int		newPageNo;
-    Status	status, unpinstatus;
-    RID		rid;
-
-    // check for very large records
-    if ((unsigned int) rec.length > PAGESIZE-DPFIXED)
-    {
-        // will never fit on a page, so don't even bother looking
-        return INVALIDRECLEN;
+const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid) {
+    if ((unsigned int)rec.length > PAGESIZE - DPFIXED) {
+        return INVALIDRECLEN; // Record too large
     }
 
-    // see if the current page has room
     if (curPage == NULL) {
-        status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
-    //    cout << "insertRecord: read last page " << headerPage->lastPage << " into buffer pool" << endl;
+        Status status = bufMgr->readPage(filePtr, headerPage->lastPage, curPage);
+        if (status != OK) return status; // Handle read failure
+        curPageNo = headerPage->lastPage;
     }
 
-
-    if (curPage->insertRecord(rec, rid) == OK)
-    {
-        outRid = rid;
+    if (curPage->insertRecord(rec, outRid) == OK) {
         curDirtyFlag = true;
         headerPage->recCnt++;
         hdrDirtyFlag = true;
-    //    cout << "Inserted record in currPage" << endl;
-
         return OK;
-    } else {
-        // insert unsuccessful, create new page and link appropriately
-        unpinstatus = bufMgr->unPinPage(filePtr, curPageNo, true);
-        // bufMgr->disposePage(filePtr, curPageNo);
-    //    cout << "insertRecord: unpinned and disposed of page " << curPageNo << endl;
-        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
-        if (status != OK) {
-            cout << "error in allocPage call in insertRecord\n";
-            return status;
-        }
-        newPage->init(newPageNo);
-    //    cout << "insertRecord: allocated new page " << newPageNo << " into buffer pool" << endl;
-        headerPage->lastPage = newPageNo;
-        headerPage->pageCnt++;
-        hdrDirtyFlag = true;
-
-        // link the new page to the current page
-        curPage->setNextPage(newPageNo);
-        curDirtyFlag = true;
-        curPage = newPage;
-        curPageNo = newPageNo;
-
-        // insert the record into the new page
-        if (curPage->insertRecord(rec, rid) == OK)
-        {
-            outRid = rid;
-            curDirtyFlag = true;
-            headerPage->recCnt++;
-            hdrDirtyFlag = true;
-            return OK;
-        } else {
-            return INVALIDRECLEN;
-        }
     }
+
+    // If we cannot insert into the current page
+    bufMgr->unPinPage(filePtr, curPageNo, true); // Mark as dirty
+
+    Page* newPage;
+    int newPageNo;
+    Status status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+    if (status != OK) return status; // Allocation failed
+
+    newPage->init(newPageNo);
+    headerPage->lastPage = newPageNo;
+    headerPage->pageCnt++;
+    hdrDirtyFlag = true;
+
+    curPage->setNextPage(newPageNo); // Link pages
+    curDirtyFlag = true;
+
+    curPage = newPage;
+    curPageNo = newPageNo;
+
+    if (curPage->insertRecord(rec, outRid) == OK) {
+        curDirtyFlag = true;
+        headerPage->recCnt++;
+        hdrDirtyFlag = true;
+        return OK;
+    }
+
+    return INVALIDRECLEN; // Unexpected failure
 }

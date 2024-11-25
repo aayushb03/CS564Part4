@@ -130,8 +130,7 @@ int main(int argc, char **argv)
     else 
     {
         scan1->startScan(0, 0, STRING, NULL, EQ);
-		i = 0; 
-
+		i = 0;
 		while (((status = scan1->scanNext(rec2Rid)) != FILEEOF))
 		{
             // reconstruct record i
